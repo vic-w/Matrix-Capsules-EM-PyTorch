@@ -38,7 +38,7 @@ parser.add_argument('--snapshot-folder', type=str, default='./snapshots', metava
                     help='where to store the snapshots')
 parser.add_argument('--data-folder', type=str, default='./data', metavar='DF',
                     help='where to store the datasets')
-parser.add_argument('--dataset', type=str, default='mnist', metavar='D',
+parser.add_argument('--dataset', type=str, default='smallNORB', metavar='D',
                     help='dataset for training(mnist, smallNORB)')
 
 
