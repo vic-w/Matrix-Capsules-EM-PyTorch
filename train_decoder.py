@@ -9,8 +9,12 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 
 from model import capsules
+from model.reconstruct import RECONSTRUCT
 from loss import SpreadLoss
 from datasets import smallNORB
+
+import cv2
+import numpy as np
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Matrix-Capsules-EM')
@@ -119,11 +123,13 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def train(train_loader, model, criterion, optimizer, epoch, device):
+def train(train_loader, model, model2, criterion, optimizer, epoch, device):
     batch_time = AverageMeter()
     data_time = AverageMeter()
 
     model.train()
+    model2.train()
+
     train_len = len(train_loader)
     epoch_acc = 0
     end = time.time()
@@ -132,13 +138,33 @@ def train(train_loader, model, criterion, optimizer, epoch, device):
         data_time.update(time.time() - end)
 
         data, target = data.to(device), target.to(device)
+        
+        # print('data.shape', data.shape)
+        # print('target.shape', target.shape)
+
         optimizer.zero_grad()
-        output = model(data)
+        pos, output = model(data)
+
+        reconstruct_out = model2(pos, output)
+        # print('reconstruct_out.shape', reconstruct_out.shape)
+        # print('pos.shape', pos.shape)
+        # print('output.shape', output.shape)
         r = (1.*batch_idx + (epoch-1)*train_len) / (args.epochs*train_len)
-        loss = criterion(output, target, r)
+        loss1 = criterion(output, target, r)
+        norm_data = ((data+0.43)/3.3)
+        loss2 = torch.mean(torch.pow(reconstruct_out-norm_data, 2))
+        #print(loss2.item())
+        loss = loss1 + loss2
         acc = accuracy(output, target)
         loss.backward()
         optimizer.step()
+
+        data_show = np.array(norm_data.cpu().detach().numpy()[0,:,:,:].reshape([28,28])*255, dtype=np.uint8)
+        recon_show = np.array(reconstruct_out.cpu().detach().numpy()[0,:,:,:].reshape([28,28])*255, dtype=np.uint8)
+        cv2.imshow('data', data_show)
+        cv2.imshow('recon', recon_show)
+        cv2.waitKey(1)
+
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -156,12 +182,14 @@ def train(train_loader, model, criterion, optimizer, epoch, device):
     return epoch_acc
 
 
-def snapshot(model, folder, epoch):
+def snapshot(model, model2, folder, epoch):
     path = os.path.join(folder, 'model_{}.pth'.format(epoch))
+    path2 = os.path.join(folder, 'model2_{}.pth'.format(epoch))
     if not os.path.exists(os.path.dirname(path)):
         os.makedirs(os.path.dirname(path))
     print('saving model to {}'.format(path))
     torch.save(model.state_dict(), path)
+    torch.save(model2.state_dict(), path2)
 
 
 def test(test_loader, model, criterion, device):
@@ -172,7 +200,7 @@ def test(test_loader, model, criterion, device):
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output = model(data)
+            pos,output = model(data)
             test_loss += criterion(output, target, r=1).item()
             acc += accuracy(output, target)[0].item()
 
@@ -202,24 +230,32 @@ def main():
     # A, B, C, D = 32, 32, 32, 32
     model = capsules(A=A, B=B, C=C, D=D, E=num_class,
                      iters=args.em_iters).to(device)
+    model2 = RECONSTRUCT().to(device)
 
-    model.load_state_dict(torch.load('snapshots/model_10.pth'))
+    model.load_state_dict(torch.load('snapshots/model_1.pth'))
+    model2.load_state_dict(torch.load('snapshots/model2_1.pth'))
 
     criterion = SpreadLoss(num_class=num_class, m_min=0.2, m_max=0.9)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    #print(model.parameters())
+    #print(model2.parameters())
+    params = list(model.parameters()) + list(model2.parameters())    
+    optimizer = optim.Adam(params, lr=args.lr, weight_decay=args.weight_decay)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=1)
 
     best_acc = test(test_loader, model, criterion, device)
     for epoch in range(1, args.epochs + 1):
-        acc = train(train_loader, model, criterion, optimizer, epoch, device)
+        acc = train(train_loader, model, model2, criterion, optimizer, epoch, device)
         acc /= len(train_loader)
         scheduler.step(acc)
         if epoch % args.test_intvl == 0:
             best_acc = max(best_acc, test(test_loader, model, criterion, device))
+
+        snapshot(model, model2, args.snapshot_folder, epoch)
+
     best_acc = max(best_acc, test(test_loader, model, criterion, device))
     print('best test accuracy: {:.6f}'.format(best_acc))
 
-    snapshot(model, args.snapshot_folder, args.epochs)
+    snapshot(model, model2, args.snapshot_folder, args.epochs)
 
 if __name__ == '__main__':
     main()

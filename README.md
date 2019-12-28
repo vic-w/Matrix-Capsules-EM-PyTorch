@@ -1,3 +1,7 @@
+1. 首先运行train.py训练分类模型
+2. 运行train_decoder.py训练重建模型
+
+
 # Matrix Capsules with EM Routing
 A PyTorch implementation of [Matrix Capsules with EM Routing](https://openreview.net/pdf?id=HJWLfGWRb)
 

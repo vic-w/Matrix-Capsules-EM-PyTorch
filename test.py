@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
+import numpy as np
 
 from PIL import Image
 
@@ -27,7 +28,8 @@ model = capsules(A=A, B=B, C=C, D=D, E=E,
 model.load_state_dict(torch.load('snapshots/model_10.pth'))
 model.eval()
 
-img = transform(Image.open('bmp/test_0.bmp')).reshape([1,1,28,28]).cuda()
-result = model(img)
+img = transform(Image.open('bmp/test_1.bmp')).reshape([1,1,28,28]).cuda()
+pos, result = model(img)
 
-print(result)
+
+print(np.argmax(result.cpu().detach().numpy()))

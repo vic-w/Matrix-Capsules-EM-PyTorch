@@ -261,6 +261,8 @@ class ConvCaps(nn.Module):
             p_out = p_out.view(b, oh, ow, self.C*self.psize)
             a_out = a_out.view(b, oh, ow, self.C)
             out = torch.cat([p_out, a_out], dim=3)
+            #print(out.shape)
+            return out
         else:
             assert c == self.B*(self.psize+1)
             assert 1 == self.K
@@ -278,9 +280,11 @@ class ConvCaps(nn.Module):
                 v = self.add_coord(v, b, h, w, self.B, self.C, self.psize)
 
             # em_routing
-            _, out = self.caps_em_routing(v, a_in, self.C, self.eps)
+            pos, out = self.caps_em_routing(v, a_in, self.C, self.eps)
+            #print(pos)
+            return pos, out
 
-        return out
+        
 
 
 class CapsNet(nn.Module):
@@ -337,8 +341,8 @@ class CapsNet(nn.Module):
         x = self.primary_caps(x)
         x = self.conv_caps1(x)
         x = self.conv_caps2(x)
-        x = self.class_caps(x)
-        return x
+        pos, x = self.class_caps(x)
+        return pos, x
 
 
 def capsules(**kwargs):

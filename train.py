@@ -133,7 +133,8 @@ def train(train_loader, model, criterion, optimizer, epoch, device):
 
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-        output = model(data)
+        pos, output = model(data)
+
         r = (1.*batch_idx + (epoch-1)*train_len) / (args.epochs*train_len)
         loss = criterion(output, target, r)
         acc = accuracy(output, target)
@@ -172,7 +173,7 @@ def test(test_loader, model, criterion, device):
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output = model(data)
+            pos,output = model(data)
             test_loss += criterion(output, target, r=1).item()
             acc += accuracy(output, target)[0].item()
 
