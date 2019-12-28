@@ -14,9 +14,9 @@ from datasets import smallNORB
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Matrix-Capsules-EM')
-parser.add_argument('--batch-size', type=int, default=128, metavar='N',
+parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 128)')
-parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
+parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
                     help='input batch size for testing (default: 1000)')
 parser.add_argument('--test-intvl', type=int, default=1, metavar='N',
                     help='test intvl (default: 1)')
@@ -38,7 +38,7 @@ parser.add_argument('--snapshot-folder', type=str, default='./snapshots', metava
                     help='where to store the snapshots')
 parser.add_argument('--data-folder', type=str, default='./data', metavar='DF',
                     help='where to store the datasets')
-parser.add_argument('--dataset', type=str, default='smallNORB', metavar='D',
+parser.add_argument('--dataset', type=str, default='mnist', metavar='D',
                     help='dataset for training(mnist, smallNORB)')
 
 
