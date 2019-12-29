@@ -47,45 +47,19 @@ parser.add_argument('--dataset', type=str, default='mnist', metavar='D',
 
 
 def get_setting(args):
-    kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
-    path = os.path.join(args.data_folder, args.dataset)
-    if args.dataset == 'mnist':
-        num_class = 10
-        train_loader = torch.utils.data.DataLoader(
-            datasets.MNIST(path, train=True, download=True,
-                           transform=transforms.Compose([
-                               transforms.ToTensor(),
-                               transforms.Normalize((0.1307,), (0.3081,))
-                           ])),
-            batch_size=args.batch_size, shuffle=True, **kwargs)
-        test_loader = torch.utils.data.DataLoader(
-            datasets.MNIST(path, train=False,
-                           transform=transforms.Compose([
-                               transforms.ToTensor(),
-                               transforms.Normalize((0.1307,), (0.3081,))
-                           ])),
-            batch_size=args.test_batch_size, shuffle=True, **kwargs)
-    elif args.dataset == 'smallNORB':
-        num_class = 5
-        train_loader = torch.utils.data.DataLoader(
-            smallNORB(path, train=True, download=True,
-                      transform=transforms.Compose([
-                          transforms.Resize(48),
-                          transforms.RandomCrop(32),
-                          transforms.ColorJitter(brightness=32./255, contrast=0.5),
-                          transforms.ToTensor()
-                      ])),
-            batch_size=args.batch_size, shuffle=True, **kwargs)
-        test_loader = torch.utils.data.DataLoader(
-            smallNORB(path, train=False,
-                      transform=transforms.Compose([
-                          transforms.Resize(48),
-                          transforms.CenterCrop(32),
-                          transforms.ToTensor()
-                      ])),
-            batch_size=args.test_batch_size, shuffle=True, **kwargs)
-    else:
-        raise NameError('Undefined dataset {}'.format(args.dataset))
+    num_class = 2
+    data_transform = transforms.Compose([
+                                    transforms.Grayscale(),
+                                    transforms.Resize([28,28]),
+                                    transforms.ToTensor()])
+
+    train_dataset = datasets.ImageFolder(os.path.join('data/human/train'), data_transform)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, pin_memory=True, num_workers=0, drop_last=True, shuffle=True)
+    
+    test_dataset = datasets.ImageFolder(os.path.join('data/human/val'), data_transform)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, pin_memory=True, num_workers=0, drop_last=True, shuffle=True)
+
+
     return num_class, train_loader, test_loader
 
 
@@ -151,16 +125,26 @@ def train(train_loader, model, model2, criterion, optimizer, epoch, device):
         # print('output.shape', output.shape)
         r = (1.*batch_idx + (epoch-1)*train_len) / (args.epochs*train_len)
         loss1 = criterion(output, target, r)
-        norm_data = ((data+0.43)/3.3)
-        loss2 = torch.mean(torch.pow(reconstruct_out-norm_data, 2))
+        #norm_data = ((data+0.43)/3.3)
+        #print(reconstruct_out.shape)
+        #print(target.shape)
+        mean_diff = torch.mean(torch.pow(reconstruct_out-data, 2), dim=(1,2,3))
+        is_face_float = torch.tensor((1-target), dtype=torch.float).cuda()
+        mean_diff = mean_diff * is_face_float
+        mean_diff /= torch.mean(is_face_float)
+
+        #print(mean_diff.shape)
+        loss2 = torch.mean(mean_diff)
         #print(loss2.item())
-        loss = loss1 + loss2
+        loss = loss1 + loss2*10
         acc = accuracy(output, target)
         loss.backward()
         optimizer.step()
 
-        data_show = np.array(norm_data.cpu().detach().numpy()[0,:,:,:].reshape([28,28])*255, dtype=np.uint8)
+        data_show = np.array(data.cpu().detach().numpy()[0,:,:,:].reshape([28,28])*255, dtype=np.uint8)
         recon_show = np.array(reconstruct_out.cpu().detach().numpy()[0,:,:,:].reshape([28,28])*255, dtype=np.uint8)
+        cv2.namedWindow('data', 0)
+        cv2.namedWindow('recon', 0)
         cv2.imshow('data', data_show)
         cv2.imshow('recon', recon_show)
         cv2.waitKey(1)
@@ -183,8 +167,8 @@ def train(train_loader, model, model2, criterion, optimizer, epoch, device):
 
 
 def snapshot(model, model2, folder, epoch):
-    path = os.path.join(folder, 'model_{}.pth'.format(epoch))
-    path2 = os.path.join(folder, 'model2_{}.pth'.format(epoch))
+    path = os.path.join(folder, 'face_model_{}.pth'.format(epoch))
+    path2 = os.path.join(folder, 'face_model2_{}.pth'.format(epoch))
     if not os.path.exists(os.path.dirname(path)):
         os.makedirs(os.path.dirname(path))
     print('saving model to {}'.format(path))
@@ -199,6 +183,7 @@ def test(test_loader, model, criterion, device):
     test_len = len(test_loader)
     with torch.no_grad():
         for data, target in test_loader:
+            #print(data.shape, target.shape)
             data, target = data.to(device), target.to(device)
             pos,output = model(data)
             test_loss += criterion(output, target, r=1).item()
@@ -230,10 +215,10 @@ def main():
     # A, B, C, D = 32, 32, 32, 32
     model = capsules(A=A, B=B, C=C, D=D, E=num_class,
                      iters=args.em_iters).to(device)
-    model2 = RECONSTRUCT(num_class).to(device)
+    model2 = RECONSTRUCT(num_class=num_class).to(device)
 
-    model.load_state_dict(torch.load('snapshots/model_1.pth'))
-    model2.load_state_dict(torch.load('snapshots/model2_1.pth'))
+    #model.load_state_dict(torch.load('snapshots/model_1.pth'))
+    #model2.load_state_dict(torch.load('snapshots/model2_1.pth'))
 
     criterion = SpreadLoss(num_class=num_class, m_min=0.2, m_max=0.9)
     #print(model.parameters())
